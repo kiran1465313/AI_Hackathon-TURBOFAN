@@ -1,52 +1,103 @@
-# Turbofan Engine RUL Predictor (CMAPSS FD001) — LSTM + Random Forest Ensemble
+# Predictive Maintenance System: RUL Estimation
+> **Goal:** Estimate Remaining Useful Life (RUL) of turbofan engines to prevent unsafe failures and optimize maintenance schedules.
 
-[![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](https://www.python.org/)
-[![TensorFlow](https://img.shields.io/badge/TensorFlow-Keras-orange)](https://www.tensorflow.org/)
-[![scikit-learn](https://img.shields.io/badge/scikit--learn-ML-yellow)](https://scikit-learn.org/)
-[![Gradio](https://img.shields.io/badge/Gradio-Web%20Dashboard-green)](https://www.gradio.app/)
+## 🏗️ System Architecture
 
-A predictive-maintenance system that estimates **Remaining Useful Life (RUL)** of turbofan engines from sensor time-series (NASA CMAPSS FD001).  
-It trains two models (LSTM + Random Forest) and combines them into a **weighted ensemble** for improved accuracy and robustness, then serves results via an interactive **Gradio + Plotly dashboard**.
-
----
-
-## Why this project matters
-In real maintenance workflows, engines should not be serviced too early (wasting cost) or too late (risking failure).  
-This project converts raw sensor logs into:
-- a clear **RUL number**
-- a **traffic-light health status** (GREEN / YELLOW / RED)
-- intuitive **trend charts** that a non-technical user can understand.
-
----
-
-## What the dashboard shows
-### Engine Details (Engine #X)
-When a user selects an engine ID:
-- **Ensemble RUL** (final best prediction)
-- **LSTM-only RUL** (for transparency/comparison)
-- Status badge: **GREEN / YELLOW / RED**
-- Rolling **RUL Trend** over cycles (Ensemble vs LSTM lines)
-- Sensor trend plot (choose any sensor)
-- Gauge meter (quick “health” visual)
-
-### Fleet Overview (Whole uploaded file)
-- Top-K most critical engines (lowest RUL)
-- RUL distribution histogram
-- Engine-wise scatter plot
+```mermaid
+graph TD
+    User([User / Maintenance Team]) -->|Upload Test File| Input[Raw Sensor Data]
+    
+    subgraph "Data Pipeline"
+        Input --> Clean[Feature Selection]
+        Clean --> Scale[Standardization (Saved Scaler)]
+        Scale --> Window[Sequence Generation (30 Cycles)]
+    end
+    
+    subgraph "Inference Engine"
+        Window --> LSTM[Model 1: LSTM (Time-Series)]
+        Window --> RF[Model 2: Random Forest (Tabular)]
+        LSTM --> Ensemble((Weighted Ensemble))
+        RF --> Ensemble
+    end
+    
+    Ensemble -->|RUL Prediction| Dash[Web Dashboard]
+    
+    subgraph "Dashboard Outputs"
+        Dash --> Fleet[Fleet Insights]
+        Dash --> Engine[Engine Deep Dive]
+    end
+    
+    style Ensemble fill:#f9f,stroke:#333,stroke-width:2px
+    style Dash fill:#bbf,stroke:#333,stroke-width:2px
+```
 
 ---
 
-## Why we use 2 models (and why ensemble is better)
+## 🚀 Key Features
+
+### 1. Hybrid AI Modeling
+We combine the strengths of Deep Learning and Classical ML to ensure robust predictions.
+
+> [!TIP]
+> **Why an Ensemble?**
+> *   **LSTM:** Captures complex time-dependent degradation patterns.
+> *   **Random Forest:** Robust to noise and effective on tabular data.
+> *   **Result:** The weighted ensemble minimizes error even if one model struggles with specific engine data.
+
+<details>
+<summary><strong>🔍 Click to view Model Details</strong></summary>
+
 ### LSTM (Deep Learning)
-- Best for learning **patterns in sequences** (time-series behavior across cycles).
-- Captures temporal trends that single-row models miss.
+*   **Input:** Sliding window of 30 cycles.
+*   **Strength:** Learns long/short-term dependencies in sensor noise.
+*   **Deployment:** Loaded in "prediction-only" mode for fast inference.
 
 ### Random Forest (Classical ML)
-- Strong baseline for tabular data and often very robust on noisy sensors.
-- Random forests average many decision trees, which helps **reduce overfitting and improve predictive accuracy**. [web:185]
+*   **Input:** Flattened vector of the 30-cycle window.
+*   **Strength:** Stable predictions via averaging multiple decision trees.
+*   **Training:** Optimized with chunked training to handle large datasets on standard hardware.
 
-### Weighted Ensemble (Best of both)
-We combine both predictions:
+</details>
 
-```text
-RUL_ensemble = w * RUL_lstm + (1 - w) * RUL_rf
+### 2. Intelligent Data Processing
+Raw sensor data is automatically transformed to match the model's training conditions.
+
+<details>
+<summary><strong>⚙️ Processing Pipeline Steps</strong></summary>
+
+1.  **Feature Selection:** Removes constant/redundant sensors that add no predictive value.
+2.  **Standardization:** Applies the *exact same* scaling parameters used during training to ensure consistency.
+3.  **Windowing:** Converts single-row readings into 30-cycle historical sequences to capture utilization trends.
+
+</details>
+
+---
+
+## 📊 Dashboard Capabilities
+
+The Gradio-based interface is designed for clarity and rapid decision-making.
+
+| Feature | Description | Utility |
+| :--- | :--- | :--- |
+| **Fleet Insights** | Distributes RUL across all engines. | Identifies which engines are most critical immediately. |
+| **Engine Deep Dive** | Specific analysis for a selected Engine ID. | Shows detailed health status and sensor trends. |
+| **Health Colors** | 🟢 Healthy / 🟡 Warning / 🔴 Critical | Instant visual cues for non-technical users. |
+| **Transparent AI** | Shows Ensemble RUL *and* LSTM-only RUL. | Builds trust by showing model consensus. |
+
+---
+
+## ⚡ Quick Start Guidance
+
+> [!IMPORTANT]
+> Ensure all trained model files (`.h5`, `.pkl`) and the scaler are present in the directory before running.
+
+1.  **Install Dependencies:** Run the setup script to install deep learning and dashboard libraries.
+2.  **Load Models:** The system will automatically load the saved LSTM and Random Forest models.
+3.  **Launch Dashboard:**
+    ```bash
+    python dashboard_app.py
+    ```
+4.  **Upload Data:** Select your CMAPSS test file and view the insights!
+
+---
+*Based on NASA CMAPSS FD001 Dataset*

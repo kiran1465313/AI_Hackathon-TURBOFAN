@@ -1,69 +1,92 @@
 # Turbofan Engine RUL Predictor (CMAPSS FD001) — LSTM + Random Forest Ensemble
 
-[![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](https://www.python.org/)
-[![TensorFlow](https://img.shields.io/badge/TensorFlow-Keras-orange)](https://www.tensorflow.org/)
-[![Scikit-learn](https://img.shields.io/badge/scikit--learn-ML-yellow)](https://scikit-learn.org/)
-[![Gradio](https://img.shields.io/badge/Gradio-Web%20UI-green)](https://www.gradio.app/)
-
-Predict **Remaining Useful Life (RUL)** of aircraft turbofan engines using NASA CMAPSS FD001 sensor time-series data.  
-This project trains:
-- an **LSTM** time-series model (deep learning)
-- a **Random Forest** regressor (classical ML)
-and combines both using a **weighted ensemble** to improve accuracy and stability.
-
-It also provides a **Gradio web dashboard** where users upload a `test_FD001.txt`-style file, select **Engine #X**, and see:
-- Ensemble RUL + LSTM-only RUL
-- GREEN / YELLOW / RED health status
-- RUL trend curve, sensor trend, gauge, and fleet-level charts.
+A predictive-maintenance web application that estimates the **Remaining Useful Life (RUL)** of turbofan aircraft engines using time-series sensor data from the NASA CMAPSS FD001 dataset. The goal is to predict how many operating cycles remain before an engine reaches failure conditions, helping teams schedule maintenance at the right time—neither too early (wasting cost/downtime) nor too late (increasing failure risk).
 
 ---
 
-## Features
-- Upload CMAPSS-style test file and get engine-wise predictions
-- Engine details panel (Engine #X):
-  - **Ensemble RUL**
-  - **LSTM-only RUL**
-  - Status badge (Green/Yellow/Red)
-  - Rolling **RUL trend** (Ensemble vs LSTM)
-  - Sensor trend plot + gauge
-- Fleet overview:
-  - Top-K critical engines
-  - RUL distribution histogram
-  - Engine-wise scatter plot
+## What this project does
+
+This system converts raw engine sensor logs into:
+- A **numeric RUL prediction** (remaining cycles)
+- A **traffic-light health status**: **GREEN / YELLOW / RED**
+- Easy-to-understand **graphs** (RUL trend, sensor trends) and **fleet overview charts**
+
+Users upload a CMAPSS-style test file, select **Engine #X**, and instantly see:
+- **Ensemble RUL** (final best prediction)
+- **LSTM-only RUL** (for transparency/comparison)
+- Health status and recommended action
+- Rolling RUL trend over time (steady degradation)
+- Sensor trend plots for deeper insight
+- Fleet-level ranking of most critical engines
 
 ---
 
-## Tech Stack
-- Python, NumPy, Pandas
-- TensorFlow / Keras (LSTM)
-- Scikit-learn (RandomForestRegressor, StandardScaler)
-- Plotly (interactive charts + gauge)
-- Gradio (web UI)
+## Why this matters (real-world value)
+
+In real maintenance workflows, incorrect timing is costly:
+- **Too early** → unnecessary maintenance cost + downtime  
+- **Too late** → unexpected failures + safety risk  
+
+This project helps maintenance teams take data-driven decisions by continuously estimating remaining life from sensor behavior across cycles.
 
 ---
 
-## Dataset (CMAPSS / FD001)
-Each dataset file has **26 columns**:
-1. unit number (`engine_id`)
-2. time in cycles (`cycle`)
-3. operational setting 1..3
-4. sensor measurements (multiple sensors)  
-FD001 contains 100 train trajectories and 100 test trajectories. [web:148]
+## How the system works (simple flow)
 
-Expected input file: space-separated `test_FD001.txt` format.
+1. **User uploads** a CMAPSS FD001-style `test_FD001.txt` file containing multiple engines.
+2. The pipeline **preprocesses** the data using the same transformations learned during training.
+3. Two models predict RUL:
+   - **LSTM** (deep learning, time-series)
+   - **Random Forest** (robust classical ML)
+4. Their predictions are combined into a **weighted ensemble** for better accuracy.
+5. The dashboard visualizes:
+   - Engine-level details for Engine #X
+   - Fleet-level critical engine list and distribution plots
 
 ---
 
-## Repository Structure (recommended)
+## Data processing (what happens inside)
+
+### Feature preparation
+- Input file contains: `engine_id`, `cycle`, operational settings, and sensor readings.
+- Near-constant columns can be removed (optional) to reduce noise and speed training.
+
+### Scaling / Standardization
+- Sensor values vary widely in magnitude, so features are **standardized** using a scaler fit on training data.
+- The same saved scaler is reused at inference to prevent mismatch between training and prediction.
+
+### Time-windowing (Sequence building)
+- Engine degradation is a time pattern, not a single snapshot.
+- We use `SEQ_LEN = 30` cycles:
+  - Each prediction uses the **last 30 cycles** of sensor history for that engine.
+
+---
+
+## Models
+
+### Model 1 — LSTM (Deep Learning time-series)
+The LSTM learns temporal degradation patterns from 30-cycle sequences.  
+It is useful because it can capture:
+- steady degradation trends,
+- short and long dependencies across time,
+- patterns not visible in a single cycle.
+
+### Model 2 — Random Forest Regressor (Classical ML)
+The Random Forest is trained on the same 30-cycle window, but the window is **flattened** into one vector so it becomes a fixed-size input suitable for tree models.  
+It is useful because it:
+- handles noisy sensor data well,
+- often performs strongly on tabular problems,
+- is stable due to averaging many trees.
+
+---
+
+## Why the ensemble is better
+
+Different model types have different strengths:
+- LSTM captures sequence dynamics.
+- Random Forest is robust on tabular signals.
+
+We combine them into a **weighted ensemble**:
+
 ```text
-.
-├── train_FD001.txt
-├── test_FD001.txt
-├── RUL_FD001.txt
-├── ai_hackathon.py
-├── gradio_app.py
-├── lstm_rul_fd001.h5
-├── scaler_fd001.pkl
-├── feature_cols_fd001.pkl
-├── rf_rul_fd001.pkl
-└── ensemble_cfg.pkl
+RUL_ensemble = w * RUL_lstm + (1 - w) * RUL_rf
